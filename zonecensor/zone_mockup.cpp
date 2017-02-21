@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
   }
 
   VideoCapture capture(infile);
-  Mat frame, fg;
+  Mat frame, fg, bg, blurred;
 
   capture >> frame;
 
@@ -40,17 +40,19 @@ int main(int argc, char** argv) {
       counter++;
       continue;
     }
+    GaussianBlur(frame, blurred, Size(11,11), 0, 0);
 
     MOG(frame, fg);
+    MOG.getBackgroundImage(bg);
 
-    erode(fg, fg, sE_e, Point(-1, -1), 1);
+    erode(fg, fg, Mat(), Point(-1, -1), 1);
     /*
-    dilate(fg, fg, sE_d, Point(-1, -1), 2);
-    erode(fg, fg, sE_e, Point(-1, -1), 0);
+    dilate(fg, fg, Mat(), Point(-1, -1), 1);
+    erode(fg, fg, Mat(), Point(-1, -1), 1);
     */
 
     // remove detected shadows
-    threshold(fg, fg, 128, 255, THRESH_BINARY);
+    //threshold(fg, fg, 128, 255, THRESH_BINARY);
 
     ///////////
     // ZONES //
@@ -87,13 +89,52 @@ int main(int argc, char** argv) {
       }
     }
 
+    /////////////////////
+    // PARTITION ZONES //
+    /////////////////////
+
+    Mat zone_low_mask, zone_med_mask, zone_high_mask;
+    zone_low_mask = Mat::zeros(zmap_float.rows, zmap_float.cols, CV_8U);
+    zone_med_mask = Mat::zeros(zmap_float.rows, zmap_float.cols, CV_8U);
+    zone_high_mask = Mat::zeros(zmap_float.rows, zmap_float.cols, CV_8U);
+
+    for(int c=0; c<fg.cols; c++) {
+      for(int r=0; r<fg.rows; r++) {
+        float rd, gn, bl;
+        float val = zmap_float.at<float>(r,c);
+        if(val < 0.4) {
+          zone_low_mask.at<unsigned char>(r,c) = 255;
+        } else if(val >= 0.4 && val < 0.5) {
+          zone_med_mask.at<unsigned char>(r,c) = 255;
+        } else {
+          zone_high_mask.at<unsigned char>(r,c) = 255;
+        }
+      }
+    }
+
+    Mat zone_low, zone_med, zone_high;
+    blurred.copyTo(zone_low, zone_low_mask);
+    frame.copyTo(zone_med, zone_med_mask);
+    frame.copyTo(zone_high, zone_high_mask);
+
+    Mat display = zone_high + zone_med + zone_low;
+
     // Display
     imshow("frame", frame);
+    //imshow("blurred", blurred);
     imshow("fg", fg);
-    //imshow("zmap", zmap);
-    imshow("zmap_hm", zmap_hm);
+    imshow("bg", bg);
+    //imshow("zmap_hm", zmap_hm);
+    //imshow("zone_low_mask", zone_low_mask);
+    //imshow("zone_med_mask", zone_med_mask);
+    //imshow("zone_high_mask", zone_high_mask);
+    imshow("zone_low", zone_low);
+    imshow("zone_med", zone_med);
+    imshow("zone_high", zone_high);
+    imshow("display", display);
 
     if(counter > 10) counter = 1;
+    cout << "\rcounter = " << counter << flush;
     if(waitKey(30) >= 0) break;
   }
 
